@@ -10,6 +10,7 @@ var users = require('./routes/users');
 var config = require('config');
 var async = require('async');
 var app = express();
+var debug = require('debug');
 //var app = express();
 //var server = require('http').Server(app);
 //var io = require('socket.io')(server);
@@ -69,8 +70,9 @@ var util = require('util');
 console.log(util.inspect(process.memoryUsage()));
 
 app.initio = function (http) {
-
-
+    var ext = config.get('ext');
+    var dirPath = config.get('sourceFilePath');
+    var np = config.get('namePattern');
     io = io(http);
     io.on('connection', function (socket) {
 
@@ -83,82 +85,113 @@ app.initio = function (http) {
         //            socket.emit('news', data);
         //        }
         //    });
+        var watchFiles;// = {};
 
-        fs.watchFile('tmp.txt', {persistent: true, interval: 3000}, function (curr, prev) {
-            //console.log('the current mtime is: ' + curr.mtime);
-            //console.log('the previous mtime was: ' + prev.mtime);
-            //console.log(curr.atime,prev.atime);
-            //console.log(curr.size,prev.size);
-            if (curr.size > prev.size) {
-                //fs.readFile('tmp.txt', 'utf8',
-                //    function (err, data) {
-                //        if (err) {
-                //            socket.emit('news', err.message);
-                //
-                //        } else {
-                //            socket.emit('news', data);
-                //
-                //        }
-                //    });
-                var size = prev.size == 0 ? prev.size : curr.size - prev.size;
-                var o = {encoding: 'utf8', start: size};//, end: curr.size};
-                var rr = fs.createReadStream('tmp.txt', o);
-                //rr.on('readable', function () {
-                //    console.log('readable:', rr.read());
-                //});
-                rr.on('data', function (data) {
-                    console.log('read data:', data.length);
-                    /*   if (err) {
-                     socket.emit('news', err.message);
+        var nameRegex = new RegExp(np);
+        if (fs.existsSync(dirPath)) {
 
-                     */
-                    //} else {
-                    socket.emit('news', data);
-                    var mem = process.memoryUsage();
-                    console.log(util.format('%s kb %s mb',mem.heapTotal / 1e4,mem.heapTotal / 1e6));
-                    console.log(util.inspect(process.memoryUsage()));
-                    //}
-                });
-                rr.on('end', function () {
-            //        console.log('end');
+            fs.readdir(dirPath, function (err, files) {
+                if (err) {
+                    debug('error finding files or paths to stream', err.message);
+                    return;
+                }
+
+                files.forEach(function (f) {
+                    debug('file', f);
+                    //.test("test.logs")
+                    if (!watchFiles)
+                        watchFiles = {};
+
+                    if (/\.log$/.test(f) && nameRegex.test(f)) {
+
+                        var fp = path.format({
+                            root: "/",
+                            dir: dirPath,
+                            base: f,
+                            ext: ext,
+                            name: f
+                        });
+                        var stat = fs.statSync(fp);
+                        watchFiles[f] = {fp: fp, stat: undefined, name: f};
+                    }
                 });
 
-                rr.on('close', function () {
-           //         console.log('close');
-                });
-            }
+                if (watchFiles) {
+                    var fstats = {}
+                    for (var index in watchFiles) {
+                        var file = watchFiles[index];
+                        fs.watch(file.fp, {persistent: true, recursive: false}, function (e, fileName) {
+                            //console.log(curr.size,prev.size);
 
-            //var l = (curr.size > prev.size ? curr : prev);
-            //var r = (curr.size < prev.size ? curr : prev);
-            //var d = l - r;
-            //var b = new Buffer(d);
-            //var offset = curr.size < prev.size ?;
-            //var l = 0;
-            //// wsr.cork();
-            //
-            //var log = 'pid: ' + process.pid + ' t: ' + process.uptime() + '\n';
-            //var i = fs.read(b, offset, log.length, 'utf8');
-            //offset += i;
-            //console.log(log.length);
-            //console.log(Buffer.byteLength(log, 'utf8');
-            //if ((offset + Buffer.byteLength(log)) >= (b.length + 1)) {
-            //    stats = fs.statSync('tmp.txt');
-            //
-            //    wsr.write(b, 'utf8', function () {
-            //        console.log('stats', stats.size);
-            //    });
-            //    b = new Buffer(256);
-            //    // wsr.end('this is the end\n');
-            //    //  wsr.uncork();
-            //    //wsr.cork();
-            //    offset = l = 0;
-            //}
-            //
-            //l += 1;
+                            var lf = watchFiles[fileName];
+                            if (!watchFiles[fileName]) {
+                                debug('something is wrong watching the file', fileName);
+                                return;
+                            }
+                            var curr = fs.statSync(lf.fp),
+                                prev = lf.stat;
+                            var o = {encoding: 'utf8', start: 0};//, end: curr.size};
+                            if (prev) {
+                                if (curr.size > prev.size) {
+                                    o.start = prev.size;// prev.size == 0 ? prev.size : curr.size - prev.size;
+                                }
+                            }
+                            var rr = fs.createReadStream(lf.fp, o);
+                            rr.on('data', function (data) {
+                                console.log('read data:', data.length);
+                                socket.emit('news', data);
+                                var mem = process.memoryUsage();
+                                console.log(util.format('%s kb %s mb', mem.heapTotal / 1e4, mem.heapTotal / 1e6));
+                                console.log(util.inspect(process.memoryUsage()));
+                            });
+                            rr.on('end', function () {
+                            });
 
-        });
+                            rr.on('close', function () {
+                            });
+                            lf.stat = curr;
+                        });
 
-
+                    }
+                }
+            });
+        }
+        //fs.
+        //fs.watchFile('tmp.txt', {persistent: true, interval: 3000}, function (curr, prev) {
+        //    //console.log(curr.size,prev.size);
+        //    if (curr.size > prev.size) {
+        //        //fs.readFile('tmp.txt', 'utf8',
+        //        //    function (err, data) {
+        //        //        if (err) {
+        //        //            socket.emit('news', err.message);
+        //        //
+        //        //        } else {
+        //        //            socket.emit('news', data);
+        //        //
+        //        //        }
+        //        //    });
+        //        var size = prev.size == 0 ? prev.size : curr.size - prev.size;
+        //        var o = {encoding: 'utf8', start: size};//, end: curr.size};
+        //        var rr = fs.createReadStream('tmp.txt', o);
+        //        //rr.on('readable', function () {
+        //        //    console.log('readable:', rr.read());
+        //        //});
+        //        rr.on('data', function (data) {
+        //            console.log('read data:', data.length);
+        //            socket.emit('news', data);
+        //            var mem = process.memoryUsage();
+        //            console.log(util.format('%s kb %s mb', mem.heapTotal / 1e4, mem.heapTotal / 1e6));
+        //            console.log(util.inspect(process.memoryUsage()));
+        //        });
+        //        rr.on('end', function () {
+        //            //        console.log('end');
+        //        });
+        //
+        //        rr.on('close', function () {
+        //            //         console.log('close');
+        //        });
+        //    }
+        //});
     });
 };
 
@@ -175,7 +208,7 @@ var os = require('os');
         console.error('all writes are now complete.');
     });
     wsr.once('drain', function (x) {
-     //   console.log('draining');
+        //   console.log('draining');
         l = 0;
     });
     var offset = 0;
