@@ -9,13 +9,10 @@ var routes = require('./routes/index');
 var users = require('./routes/users');
 var config = require('config');
 var async = require('async');
-var app = express();
 var debug = require('debug');
-//var app = express();
-//var server = require('http').Server(app);
-//var io = require('socket.io')(server);
-//
-////server.listen(8181);
+var app = express();
+var FileClient = require('./FileClient');
+
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'hbs');
@@ -67,131 +64,142 @@ var io = require('socket.io');
 
 var util = require('util');
 
-console.log(util.inspect(process.memoryUsage()));
+//console.log(util.inspect(process.memoryUsage()));
 
-var ext = config.get('ext'),
-    dirPath = config.get('sourceFilePath'),
-    np = config.get('namePattern');
-
-dirPath = path.normalize(dirPath);
+//var ext = config.get('ext'),
+//    dirPath = config.get('sourceFilePath'),
+//    np = config.get('namePattern');
+//
+//dirPath = path.normalize(dirPath);
+var fc = new FileClient(config);
 
 app.initio = function (http) {
     io = io(http);
     io.on('connection', function (socket) {
-        var watchFiles;// = {};
+        fc.beginWatch(socket, function (err) {
 
-        var nameRegex = new RegExp(np);
-        if (fs.existsSync(dirPath)) {
+            if (err) {
+                debug('error occured on beginwatch. %s', err.message);
+                fc.endWatch();
+                return;
+            }
+            debug(util.inspect(fc));
+            debug('watching for file and dir changes.');
+            //process.nextTick(function () {
+            var count = 0;
+            var interval = Math.floor((Math.random() * 3000) + 1);
+            var c = setInterval(function () {
 
-            fs.readdir(dirPath, function (err, files) {
-                if (err) {
-                    debug('error finding files or paths to stream', err.message);
-                    return;
+                if (count >= 5) {
+
+                    dropNewTestFiles();
+                    writeTestData(fc.targetFile.fp);
+                    console.log(util.inspect(fc.targetFile));
+                    if (count == 20)
+                        clearTimeout(c);
                 }
+                else {
+                    writeTestData(fc.targetFile.fp);
+                }
+                count += 1;
+                if (count >= 5) {
+                    interval = 5000;
+                }
+            }, interval);
 
-                files.forEach(function (f) {
-                    debug('file', f);
-                    //.test("test.logs")
-                    if (!watchFiles)
-                        watchFiles = {};
+            function dropNewTestFiles() {
 
-                    if (/\.log$/.test(f) && nameRegex.test(f)) {
+                var o = {encoding: 'utf8', start: 0};
+                var date = new Date();
+                var path = fc.getFilePath(util.format('media-server_%s-%s-%s_%s-%s-%s.%s.log', date.getFullYear(), date.getMonth() + 1, date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds(), date.getTime()));
+                var wsr = fs.createWriteStream(path, {encoding: 'utf8'});
+                wsr.on('finish', function () {
+                    console.log('all writes are now complete.' + path);
+                    // writeTestData(fc.targetFile.fp);
+                });
+                wsr.once('drain', function (x) {
+                    console.log('drain');
 
-                        var fp = path.format({
-                            root: "/",
-                            dir: dirPath,
-                            base: f,
-                            ext: ext,
-                            name: f
-                        });
-                        watchFiles[f] = {fp: fp, stat: undefined, name: f};
+                });
+                wsr.on('pipe', function (src) {
+                    console.log('piping');
+
+                });
+                wsr.on('error', function () {
+                    console.log('error occured writing data');
+
+                });
+                var rr = fs.createReadStream(fc.getFilePath('media-server_2015-10-02_15-01-36.00001.pid1164.log'), o);
+                //rr.pipe(wsr);
+                rr.pause();
+                rr.on('readable', function () {
+
+                    var chunk;
+                    while (null !== (chunk = rr.read())) {
+                        //wsr.write(chunk);
                     }
                 });
+                rr.on('data', function (data) {
+                    console.log('got %d bytes of data', data.length);
+                    console.log(data);
+                    wsr.write(data);
+                });
+                rr.on('end', function () {
+                    wsr.end(util.format('<br/><p style="color:red;">%s</p>', path));
+                });
+            }
 
-                if (watchFiles) {
-                    for (var index in watchFiles) {
-                        var file = watchFiles[index];
-                        fs.watch(file.fp, {persistent: true, recursive: false}, function (e, fileName) {
-                            var lf = watchFiles[fileName];
-                            if (!watchFiles[fileName]) {
-                                debug('something is wrong watching the file', fileName);
-                                return;
-                            }
-                            var curr = fs.statSync(lf.fp),
-                                prev = lf.stat;
-                            var o = {encoding: 'utf8', start: 0};//, end: curr.size};
-                            if (prev && curr.size > prev.size) {
-                                o.start = prev.size;// prev.size == 0 ? prev.size : curr.size - prev.size;
-                            }
-                            var rr = fs.createReadStream(lf.fp, o);
-                            rr.on('data', function (data) {
-                                console.log('read data:', data.length);
-                                socket.emit('news', data);
-                                var mem = process.memoryUsage();
-                                console.log(util.format('%s kb %s mb', mem.heapTotal / 1e4, mem.heapTotal / 1e6));
-                                console.log(util.inspect(process.memoryUsage()));
-                            });
-                            rr.on('end', function () {
-                            });
-
-                            rr.on('close', function () {
-                            });
-                            lf.stat = curr;
-                        });
-
-                    }
-                }
-            });
-        }
+            return;
+        });
     });
 };
 
+
 var os = require('os');
-(function () {
+
+function writeTestData(newTargetFile) {
     var dSize = fs.statSync('data.json').size;
+
     var offset = 0;
     var l = 0;
-    setInterval(function () {
-        offset = offset < dSize ? offset : 0;
-        var stop = Math.floor((Math.random() * 20) + 1);
-        var o = {encoding: 'utf8', start: offset, end: offset + stop};
+    //setTimeout(function () {
+    var wfSize = fs.statSync(newTargetFile).size;
+    offset = offset < dSize ? offset : 0;
+    var stop = Math.floor((Math.random() * 0x1ff) + 1);
+    var o = {encoding: 'utf8', start: 0};// offset, end: offset + stop};
 
-        var path = dirPath + "media-server_2015-10-02_15-01-36.00001.pid1164.log";
-        var wsr = fs.createWriteStream(path, {encoding: 'utf8'});
-        wsr.on('finish', function () {
-            //  console.error('all writes are now complete.');
-        });
-        wsr.once('drain', function (x) {
-        });
+    var wsr = fs.createWriteStream(newTargetFile, {flags: 'r+', defaultEncoding: 'utf8', start: wfSize});
+    //if (offset == 0) {
+    //    wsr.write('****************************************************************************\n');
+    //}
+    wsr.on('finish', function () {
+        debug('all writes are now complete.');
+    });
+    wsr.once('drain', function (x) {
+    });
 
-        var rr = fs.createReadStream('data.json', o);
-        rr.pipe(wsr);
-        //rr.on('readable', function () {
-        //    var vr = rr.read(1);
-        //    offset = null == vr ? offset = 0 : offset;
-        //});
-        //rr.on('data', function (data) {
-        //    console.log('write data:', data);
-        //    //wsr.write(data);
-        //    //fs.appendFile(path, data, 'utf8', function (err) {
-        //    //    if (err) {
-        //    //        console.log(err.message);
-        //    //    }
-        //    //});
-        //});
-        //rr.on('end', function () {
-        //});
-        //
-        //rr.on('close', function () {
-        //});
+    var rr = fs.createReadStream('data.json', o);
+    //rr.pipe(wsr);
+    //offset += stop + 1;
+    rr.pause();
+    rr.on('readable', function () {
 
-
-        offset += stop + 1;// Math.floor((Math.random() * 20) + 1);
-
-
-    }, Math.floor((Math.random() * 3000) + 1));
-    //}, 0);
-
-})();
+        var chunk;
+        while (null !== (chunk = rr.read(0xff))) {
+            //wsr.write(chunk);
+        }
+    });
+    rr.on('data', function (data) {
+        console.log('got %d bytes of data', data.length);
+        console.log(data);
+        wsr.write(data);
+    });
+    rr.on('end', function () {
+        wsr.end(util.format('<br/><p style="color:red;">%s</p>', newTargetFile));
+    });
+    //}, Math.floor((Math.random() * 2000) + 1));
+    //}, 3000);
+    //return clear;
+};
 
 module.exports = app;
