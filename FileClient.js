@@ -185,11 +185,12 @@ FileClient.prototype.sendData = function (changedFileName) {
 
     rr.pause();
     rr.on('readable', function () {
-        var chunk,
-            chunksize = 0x3ff;
-        while (null !== (chunk = rr.read(chunksize))) {
-            //wsr.write(chunk);
-        }
+        //var chunk,
+        //    chunksize = 0x3ff;
+        //while (null !== (chunk = rr.read(chunksize))) {
+        //    //wsr.write(chunk);
+        //}
+        rr.read();
     });
 
     rr.on('data', function (data) {
@@ -198,7 +199,7 @@ FileClient.prototype.sendData = function (changedFileName) {
         //var mem = process.memoryUsage();
         //console.log(util.format('%s kb %s mb', mem.heapTotal / 1e4, mem.heapTotal / 1e6));
         //console.log(util.inspect(process.memoryUsage()));
-        self.socket.emit('news', data);
+        self.socket.emit('news', data);//{data:data});
     });
     rr.on('end', function () {
         console.log(util.format('done sending data: %s, bytes: %s', currFile.fp, bytesSent));

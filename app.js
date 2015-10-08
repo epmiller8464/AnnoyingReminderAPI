@@ -7,12 +7,18 @@ var bodyParser = require('body-parser');
 var fs = require('fs');
 var routes = require('./routes/index');
 var users = require('./routes/users');
+var util = require('util');
+
 var config = require('config');
 var async = require('async');
 var debug = require('debug');
 var app = express();
 var FileClient = require('./FileClient');
-
+var env = config.util.getEnv('NODE_ENV');
+console.log('NODE_CONFIG: ' + env);
+console.log('ENV_VARS: ' + util.inspect(process.env));
+console.log('cwd: ' + process.cwd());
+//
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'hbs');
@@ -25,6 +31,7 @@ app.use(bodyParser.urlencoded({extended: false}));
 app.use(cookieParser());
 app.use(require('less-middleware')(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'static')));
 
 app.use('/', routes);
 app.use('/users', users);
@@ -62,8 +69,6 @@ app.use(function (err, req, res, next) {
 var io = require('socket.io');
 
 
-var util = require('util');
-
 //console.log(util.inspect(process.memoryUsage()));
 
 //var ext = config.get('ext'),
@@ -85,70 +90,70 @@ app.initio = function (http) {
             }
             debug(util.inspect(fc));
             debug('watching for file and dir changes.');
-            //process.nextTick(function () {
-            var count = 0;
-            var interval = Math.floor((Math.random() * 3000) + 1);
-            var c = setInterval(function () {
+            if (env === 'development') {
+                var count = 0;
+                var interval = 1000;// Math.floor((Math.random() * 3000) + 1);
+                var c = setInterval(function () {
 
-                if (count >= 5) {
+                    if (count >= 5) {
 
-                    dropNewTestFiles();
-                    writeTestData(fc.targetFile.fp);
-                    console.log(util.inspect(fc.targetFile));
-                    if (count == 20)
-                        clearTimeout(c);
-                }
-                else {
-                    writeTestData(fc.targetFile.fp);
-                }
-                count += 1;
-                if (count >= 5) {
-                    interval = 5000;
-                }
-            }, interval);
-
-            function dropNewTestFiles() {
-
-                var o = {encoding: 'utf8', start: 0};
-                var date = new Date();
-                var path = fc.getFilePath(util.format('media-server_%s-%s-%s_%s-%s-%s.%s.log', date.getFullYear(), date.getMonth() + 1, date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds(), date.getTime()));
-                var wsr = fs.createWriteStream(path, {encoding: 'utf8'});
-                wsr.on('finish', function () {
-                    console.log('all writes are now complete.' + path);
-                    // writeTestData(fc.targetFile.fp);
-                });
-                wsr.once('drain', function (x) {
-                    console.log('drain');
-
-                });
-                wsr.on('pipe', function (src) {
-                    console.log('piping');
-
-                });
-                wsr.on('error', function () {
-                    console.log('error occured writing data');
-
-                });
-                var rr = fs.createReadStream(fc.getFilePath('media-server_2015-10-02_15-01-36.00001.pid1164.log'), o);
-                //rr.pipe(wsr);
-                rr.pause();
-                rr.on('readable', function () {
-
-                    var chunk;
-                    while (null !== (chunk = rr.read())) {
-                        //wsr.write(chunk);
+                        dropNewTestFiles();
+                        writeTestData(fc.targetFile.fp);
+                        console.log(util.inspect(fc.targetFile));
+                        if (count == 20)
+                            clearTimeout(c);
                     }
-                });
-                rr.on('data', function (data) {
-                    console.log('got %d bytes of data', data.length);
-                    console.log(data);
-                    wsr.write(data);
-                });
-                rr.on('end', function () {
-                    wsr.end(util.format('<br/><p style="color:red;">%s</p>', path));
-                });
-            }
+                    else {
+                        writeTestData(fc.targetFile.fp);
+                    }
+                    count += 1;
+                    if (count >= 5) {
+                        interval = 10000;
+                    }
+                }, interval);
 
+                function dropNewTestFiles() {
+
+                    var o = {encoding: 'utf8', start: 0};
+                    var date = new Date();
+                    var path = fc.getFilePath(util.format('media-server_%s-%s-%s_%s-%s-%s.%s.log', date.getFullYear(), date.getMonth() + 1, date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds(), date.getTime()));
+                    var wsr = fs.createWriteStream(path, {encoding: 'utf8'});
+                    wsr.on('finish', function () {
+                        console.log('all writes are now complete.' + path);
+                        // writeTestData(fc.targetFile.fp);
+                    });
+                    wsr.once('drain', function (x) {
+                        console.log('drain');
+
+                    });
+                    wsr.on('pipe', function (src) {
+                        console.log('piping');
+
+                    });
+                    wsr.on('error', function () {
+                        console.log('error occured writing data');
+
+                    });
+                    var rr = fs.createReadStream(fc.getFilePath('media-server_2015-10-02_15-01-36.00001.pid1164.log'), o);
+                    //rr.pipe(wsr);
+                    rr.pause();
+                    rr.on('readable', function () {
+
+                        var chunk;
+                        while (null !== (chunk = rr.read())) {
+                            //wsr.write(chunk);
+                        }
+                    });
+                    rr.on('data', function (data) {
+                        console.log('got %d bytes of data', data.length);
+                        console.log(data);
+                        wsr.write(data);
+                    });
+                    rr.on('end', function () {
+                        wsr.end(util.format('<br/>%s', path));
+                    });
+                }
+            }
             return;
         });
     });
@@ -195,7 +200,7 @@ function writeTestData(newTargetFile) {
         wsr.write(data);
     });
     rr.on('end', function () {
-        wsr.end(util.format('<br/><p style="color:red;">%s</p>', newTargetFile));
+        wsr.end(util.format('<br/>%s', newTargetFile));
     });
     //}, Math.floor((Math.random() * 2000) + 1));
     //}, 3000);

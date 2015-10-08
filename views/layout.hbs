@@ -3,18 +3,27 @@
 <head>
     <title>{{title}}</title>
     <link rel='stylesheet' href='/stylesheets/style.css'/>
-    <link rel="stylesheet" href="bower_components/bootstrap/dist/css/bootstrap.min.css">
-    <script src="bower_components/jquery/dist/jquery.min.js"></script>
-    <script src="bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="/bower_components/bootstrap/dist/css/bootstrap.min.css">
+    <script src="/bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="/bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
 </head>
 <body>
-{{{body}}}
+<ul id="list">
+</ul>
 <script src="/socket.io/socket.io.js"></script>
 <script>
-    var socket = io.connect('http://localhost:8282');
+    var path = 'http://localhost:8282',
+            dynamPath = 'http://' + location.host;
+
+    //    console.log(path, dynamPath);
+    var socket = io.connect(dynamPath);//'http://localhost:8282');
     socket.on('news', function (data) {
-        console.log(data);
-        document.write(data);
+//        console.log(data);
+       // document.write(data);
+        //var obj = JSON.parse(data);
+        var html = '<li><code>' + data + '</code></li>';
+        console.log($('#list'))
+        $('#list').prepend($(html));
         //socket.emit('my other event', {my: 'data'});
     });
 </script>

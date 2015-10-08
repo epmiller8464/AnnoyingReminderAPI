@@ -1,0 +1,8 @@
+{
+  "sourceFilePath": "\/var\/log\/kurento-media-server\/",
+  "ext": "\\.log$",
+  "namePattern": "[M|m]edia-[S|s]erver_[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}",
+  "archivePath": "\/var\/log\/kurento-media-server\/log\/",
+  "host": "192.168.1.105",
+  "port": "8282"
+}

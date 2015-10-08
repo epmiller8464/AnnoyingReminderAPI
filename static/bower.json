@@ -1,23 +1,14 @@
 {
-  "name": "AnnoyingReminderAPI",
+  "name": "y",
   "version": "0.0.0",
   "homepage": "https://github.com/epmiller8464/AnnoyingReminderAPI",
   "authors": [
     "Eric Miller <epmiller8464@gmail.com>"
   ],
   "description": "",
-  "main": "index.hbs",
-  "moduleType": [
-    "globals",
-    "node"
-  ],
-  "keywords": [
-    "KMS",
-    "log",
-    "reader"
-  ],
+  "main": "",
+  "moduleType": [],
   "license": "MIT",
-  "private": true,
   "ignore": [
     "**/.*",
     "node_modules",
